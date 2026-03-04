@@ -182,4 +182,6 @@ if uploaded_file is not None:
 
             st.write("Final MSE:", round(mean_squared_error(y_test, preds),4))
 
+app.py
+requirements.txt
 
