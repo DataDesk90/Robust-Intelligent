@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+streamlit
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
 
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
@@ -179,4 +185,5 @@ if uploaded_file is not None:
             st.write("Final Accuracy:", round(accuracy_score(y_test, preds),4))
         else:
             st.write("Final R2:", round(r2_score(y_test, preds),4))
+
             st.write("Final MSE:", round(mean_squared_error(y_test, preds),4))
