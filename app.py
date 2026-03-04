@@ -1,31 +1,69 @@
+robust-intelligent/
+   app.py
+   requirements.txt
+robust-intelligent/app.py
+app.py
+robust-intelligent/
+   app.py
+   requirements.txt
+streamlit
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
 import streamlit as st
 import pandas as pd
 import numpy as np
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.ensemble import RandomForestClassifier  # agar use ho raha ho
 
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 
+
 from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+from sklearn.svm import SVC, SVR
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.metrics import accuracy_score, r2_score
 
-st.set_page_config(page_title="Universal ML Tool", layout="wide")
+from sklearn.metrics import accuracy_score, r2_score, mean_squared_error
+from collections import Counter
 
-st.title("🚀 Universal Machine Learning Model Selector")
+st.set_page_config(page_title="Robust AutoML Tool", layout="wide")
+st.title("🚀 Robust Intelligent AutoML System")
 
-uploaded_file = st.file_uploader("Upload CSV Dataset", type=["csv"])
+uploaded_file = st.file_uploader("Upload ANY CSV Dataset", type=["csv"])
 
 if uploaded_file is not None:
 
-    df = pd.read_csv(uploaded_file)
+    # -----------------------
+    # SAFE CSV LOADING
+    # -----------------------
+    try:
+        df = pd.read_csv(uploaded_file)
+        if df.shape[1] == 1:
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, sep=';')
+    except:
+        uploaded_file.seek(0)
+        df = pd.read_csv(uploaded_file, sep=';')
 
-    st.write("### Dataset Preview")
+    st.subheader("Dataset Preview")
     st.dataframe(df.head())
+    st.write("Shape:", df.shape)
+
+    df = df.drop_duplicates()
 
     target = st.selectbox("Select Target Column", df.columns)
 
@@ -34,96 +72,133 @@ if uploaded_file is not None:
         X = df.drop(columns=[target])
         y = df[target]
 
-        # Auto detect problem type
-        if y.dtype == "object" or y.nunique() <= 10:
+        # -----------------------
+        # PROBLEM TYPE DETECTION
+        # -----------------------
+        if y.dtype == "object" or len(np.unique(y)) <= 15:
             problem_type = "Classification"
+            st.success("Detected: Classification Problem")
         else:
             problem_type = "Regression"
+            st.success("Detected: Regression Problem")
 
-        st.write(f"### Detected Problem Type: {problem_type}")
+        # -----------------------
+        # FEATURE TYPES
+        # -----------------------
+        numeric_features = X.select_dtypes(include=np.number).columns
+        categorical_features = X.select_dtypes(exclude=np.number).columns
 
-        # Identify column types
-        numeric_cols = X.select_dtypes(include=["int64", "float64"]).columns
-        categorical_cols = X.select_dtypes(include=["object"]).columns
-
-        # Preprocessing
-        numeric_transformer = Pipeline(steps=[
-            ("imputer", SimpleImputer(strategy="mean")),
+        numeric_pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
             ("scaler", StandardScaler())
         ])
 
-        categorical_transformer = Pipeline(steps=[
+        categorical_pipeline = Pipeline([
             ("imputer", SimpleImputer(strategy="most_frequent")),
             ("encoder", OneHotEncoder(handle_unknown="ignore"))
         ])
 
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ("num", numeric_transformer, numeric_cols),
-                ("cat", categorical_transformer, categorical_cols)
-            ]
-        )
+        preprocessor = ColumnTransformer([
+            ("num", numeric_pipeline, numeric_features),
+            ("cat", categorical_pipeline, categorical_features)
+        ])
 
-        # Train-Test Split
+        if problem_type == "Classification":
+            le = LabelEncoder()
+            y = le.fit_transform(y)
+
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
 
-        train_size = len(X_train)
-
-        # Model Selection
+        # -----------------------
+        # MODEL SET
+        # -----------------------
         if problem_type == "Classification":
             models = {
-                "Logistic Regression": LogisticRegression(max_iter=1000),
-                "Random Forest": RandomForestClassifier(),
+                "Logistic Regression": LogisticRegression(max_iter=2000),
                 "Decision Tree": DecisionTreeClassifier(),
-                "KNN": KNeighborsClassifier(n_neighbors=min(5, train_size))
+                "Random Forest": RandomForestClassifier(),
+                "Gradient Boosting": GradientBoostingClassifier(),
+                "SVM": SVC(),
+                "KNN": KNeighborsClassifier()
             }
             scoring = "accuracy"
         else:
             models = {
                 "Linear Regression": LinearRegression(),
                 "Random Forest": RandomForestRegressor(),
-                "Decision Tree": DecisionTreeRegressor(),
-                "KNN": KNeighborsRegressor(n_neighbors=min(5, train_size))
+                "Gradient Boosting": GradientBoostingRegressor(),
+                "SVR": SVR(),
+                "KNN Regressor": KNeighborsRegressor()
             }
             scoring = "r2"
 
-        model_name = st.selectbox("Select Model", list(models.keys()))
-        model = models[model_name]
+        results = {}
 
-        pipe = Pipeline(steps=[
-            ("preprocessor", preprocessor),
-            ("model", model)
-        ])
+        for name, model in models.items():
 
-        if st.button("Train Model"):
+            pipe = Pipeline([
+                ("preprocessing", preprocessor),
+                ("model", model)
+            ])
 
             try:
-                # Adaptive CV folds
-                if len(X_train) >= 50:
-                    cv_folds = 5
-                elif len(X_train) >= 20:
-                    cv_folds = 3
+                # -----------------------
+                # ADAPTIVE CV
+                # -----------------------
+                if problem_type == "Classification":
+                    class_counts = Counter(y_train)
+                    min_class = min(class_counts.values())
+
+                    if min_class >= 5:
+                        cv_folds = 5
+                    elif min_class >= 3:
+                        cv_folds = 3
+                    else:
+                        cv_folds = 2
                 else:
-                    cv_folds = 2
+                    if len(X_train) >= 50:
+                        cv_folds = 5
+                    elif len(X_train) >= 20:
+                        cv_folds = 3
+                    else:
+                        cv_folds = 2
 
-                scores = cross_val_score(pipe, X_train, y_train, cv=cv_folds, scoring=scoring)
+                scores = cross_val_score(pipe, X_train, y_train,
+                                         cv=cv_folds,
+                                         scoring=scoring)
 
+                results[name] = scores.mean()
+
+            except:
+                # FALLBACK if CV fails
                 pipe.fit(X_train, y_train)
                 preds = pipe.predict(X_test)
 
-                st.write("### Cross Validation Score")
-                st.write(np.mean(scores))
-
                 if problem_type == "Classification":
-                    acc = accuracy_score(y_test, preds)
-                    st.write("### Test Accuracy")
-                    st.write(acc)
+                    results[name] = accuracy_score(y_test, preds)
                 else:
-                    r2 = r2_score(y_test, preds)
-                    st.write("### Test R2 Score")
-                    st.write(r2)
+                    results[name] = r2_score(y_test, preds)
 
-            except Exception as e:
-                st.error(f"Error occurred: {e}")
+        st.subheader("Model Performance")
+
+        for name, score in results.items():
+            st.write(f"{name}: {round(score,4)}")
+
+        best_model_name = max(results, key=results.get)
+        st.success(f"🏆 Best Model Selected: {best_model_name}")
+
+        final_model = Pipeline([
+            ("preprocessing", preprocessor),
+            ("model", models[best_model_name])
+        ])
+
+        final_model.fit(X_train, y_train)
+        preds = final_model.predict(X_test)
+
+        if problem_type == "Classification":
+            st.write("Final Accuracy:", round(accuracy_score(y_test, preds),4))
+        else:
+            st.write("Final R2:", round(r2_score(y_test, preds),4))
+            st.write("Final MSE:", round(mean_squared_error(y_test, preds),4))
