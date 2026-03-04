@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-streamlit
 pandas
 numpy
 scikit-learn
@@ -187,3 +186,4 @@ if uploaded_file is not None:
             st.write("Final R2:", round(r2_score(y_test, preds),4))
 
             st.write("Final MSE:", round(mean_squared_error(y_test, preds),4))
+
